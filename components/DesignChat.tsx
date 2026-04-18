@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Send, User, Sparkles, ShoppingBag } from 'lucide-react';
 import { createDesignChat } from '@/lib/gemini';
 
-interface Message {
+export interface Message {
   role: 'user' | 'model';
   content: string;
 }
@@ -13,12 +13,11 @@ interface Message {
 interface DesignChatProps {
   onRefine: (refinement: string) => void;
   isGenerating: boolean;
+  messages: Message[];
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
 }
 
-export function DesignChat({ onRefine, isGenerating }: DesignChatProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'model', content: "I've rendered the vision for your space. It emphasizes natural light and creates a cleaner flow between the dining and sitting areas." }
-  ]);
+export function DesignChat({ onRefine, isGenerating, messages, setMessages }: DesignChatProps) {
   const [input, setInput] = useState('');
   const [chat] = useState(() => createDesignChat());
   const messagesEndRef = useRef<HTMLDivElement>(null);

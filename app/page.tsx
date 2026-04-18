@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Upload, Camera, Eraser, Sparkles, SlidersHorizontal, ArrowRight, Check } from 'lucide-react';
+import { Upload, Camera, Eraser, Sparkles, SlidersHorizontal, ArrowRight, Check, Save, Download, History } from 'lucide-react';
 import { ComparisonSlider } from '@/components/ComparisonSlider';
 import { StyleSelector, STYLES } from '@/components/StyleSelector';
-import { DesignChat } from '@/components/DesignChat';
+import { DesignChat, Message } from '@/components/DesignChat';
 import { reimaginedRoom } from '@/lib/gemini';
+import { saveDesign, getDesigns } from '@/lib/storage';
 
 export default function AuraHome() {
   const [originalImage, setOriginalImage] = useState<string | null>(null);
@@ -14,6 +15,11 @@ export default function AuraHome() {
   const [selectedStyle, setSelectedStyle] = useState(STYLES[0].id);
   const [isGenerating, setIsGenerating] = useState(false);
   const [step, setStep] = useState<'upload' | 'design'>('upload');
+  const [messages, setMessages] = useState<Message[]>([
+    { role: 'model', content: "I've rendered the vision for your space. It emphasizes natural light and creates a cleaner flow between the dining and sitting areas." }
+  ]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -22,6 +28,10 @@ export default function AuraHome() {
       reader.onload = (event) => {
         setOriginalImage(event.target?.result as string);
         setStep('design');
+        // Reset messages for new design
+        setMessages([
+          { role: 'model', content: "I've rendered the vision for your space. It emphasizes natural light and creates a cleaner flow between the dining and sitting areas." }
+        ]);
         // Auto-generate first design
         generateDesign(event.target?.result as string, selectedStyle);
       };
@@ -57,6 +67,33 @@ export default function AuraHome() {
     }
   };
 
+  const handleSave = async () => {
+    if (!originalImage || !reimaginedImage) return;
+    
+    setIsSaving(true);
+    try {
+      const designData = {
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+        style: STYLES.find(s => s.id === selectedStyle)?.name || selectedStyle,
+        original: originalImage,
+        reimagined: reimaginedImage,
+        refinements: messages.filter(m => m.role === 'user').map(m => m.content)
+      };
+
+      // Save using IndexedDB storage utility
+      await saveDesign(designData);
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error) {
+      console.error("Failed to save design:", error);
+      alert("Aura encountered a storage limit error. We've optimized the system; please try saving again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <main className="max-w-7xl mx-auto min-h-screen border-x border-brand-border bg-brand-bg flex flex-col">
       {/* Header */}
@@ -69,9 +106,21 @@ export default function AuraHome() {
           <span className="text-2xl font-serif italic tracking-tight">Aura.ai</span>
         </motion.div>
         
-        <div className="text-right">
-           <div className="text-[10px] uppercase tracking-[2px] opacity-60 mb-1">Active Design Space</div>
-           <div className="text-sm font-medium">Lexington Ave. Loft — Living Area</div>
+        <div className="flex items-center gap-6">
+            <div className="text-right flex flex-col items-end">
+                <div className="text-[10px] uppercase tracking-[2px] opacity-60 mb-0.5">Active Design Space</div>
+                <div className="text-xs font-medium">Lexington Ave. Loft — Living Area</div>
+            </div>
+            
+            <button 
+                onClick={handleSave}
+                disabled={isSaving || !reimaginedImage}
+                className={`px-6 py-2 border border-brand-ink text-[11px] font-bold uppercase tracking-[1px] transition-all flex items-center gap-2 ${
+                    saveSuccess ? 'bg-green-600 border-green-600 text-white' : 'bg-brand-ink text-white hover:bg-white hover:text-brand-ink'
+                } disabled:opacity-50`}
+            >
+                {saveSuccess ? <><Check size={14} /> Saved</> : isSaving ? 'Saving...' : <><Save size={14} /> Save Design</>}
+            </button>
         </div>
       </header>
 
@@ -155,7 +204,12 @@ export default function AuraHome() {
 
             {/* Side Console */}
             <div className="bg-white p-6 flex flex-col">
-                <DesignChat onRefine={handleChatRefinement} isGenerating={isGenerating} />
+                <DesignChat 
+                  onRefine={handleChatRefinement} 
+                  isGenerating={isGenerating} 
+                  messages={messages}
+                  setMessages={setMessages}
+                />
                 
                 <div className="mt-10">
                     <span className="text-[10px] uppercase tracking-[2px] mb-4 block border-b border-brand-border pb-2 opacity-60">Curated Collection</span>
