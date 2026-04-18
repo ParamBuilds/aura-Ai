@@ -2,9 +2,18 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-const geminiAi = new GoogleGenAI({ 
-  apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY! 
-});
+let geminiAiInstance: any = null;
+
+function getGeminiAi() {
+  if (!geminiAiInstance) {
+    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("NEXT_PUBLIC_GEMINI_API_KEY is not defined. Please set it in your environment variables.");
+    }
+    geminiAiInstance = new GoogleGenAI({ apiKey });
+  }
+  return geminiAiInstance;
+}
 
 const ENABLE_OPENROUTER = process.env.NEXT_PUBLIC_ENABLE_OPENROUTER === 'true';
 
@@ -46,7 +55,8 @@ export async function reimaginedRoom(originalImageBase64: string, style: string,
     ? `Reimagine this room in ${style} style. Additionally, apply these refinements: ${refinement}. High quality, photorealistic, interior design photography.`
     : `Reimagine this room as a high-end interior design project in ${style} style. Maintain the basic structural layout but completely transform the furniture, decor, color palette, and lighting to match ${style}. Photorealistic, 4k.`;
 
-  const response = await geminiAi.models.generateContent({
+  const ai = getGeminiAi();
+  const response = await ai.models.generateContent({
     model: MODELS.IMAGE,
     contents: {
       parts: [
@@ -114,7 +124,8 @@ export function createDesignChat() {
   }
 
   // Gemini Implementation (Existing Client-Side)
-  return geminiAi.chats.create({
+  const ai = getGeminiAi();
+  return ai.chats.create({
     model: MODELS.COMPLEX,
     config: {
       systemInstruction: `You are Aura, a world-class interior design consultant. 
