@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-cormorant), Georgia, serif;
+  
+  --color-brand-bg: #F9F7F4;
+  --color-brand-ink: #1A1A1A;
+  --color-brand-accent: #8C7862;
+  --color-brand-border: rgba(26, 26, 26, 0.1);
+  
+  --radius-brand: 2px;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-brand-bg);
+    color: var(--color-brand-ink);
+  }
+  
+  h1, h2, h3, h4, .serif {
+    font-family: var(--font-serif);
+  }
+}
