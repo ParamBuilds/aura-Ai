@@ -2,12 +2,17 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Upload, Camera, Eraser, Sparkles, SlidersHorizontal, ArrowRight, Check, Save, Download, History } from 'lucide-react';
-import { ComparisonSlider } from '@/components/ComparisonSlider';
-import { StyleSelector, STYLES } from '@/components/StyleSelector';
-import { DesignChat, Message } from '@/components/DesignChat';
-import { reimaginedRoom } from '@/lib/gemini';
-import { saveDesign, getDesigns } from '@/lib/storage';
+import { reimaginedRoom, createDesignChat } from '@/lib/gemini';
+import { saveDesign } from '@/lib/storage';
+import { STYLES } from '@/components/StyleSelector';
+import { Message } from '@/components/DesignChat';
+
+// New UI Components
+import { Navbar } from '@/components/ui/Navbar';
+import { UploadZone } from '@/components/ui/UploadZone';
+import { StylePicker } from '@/components/ui/StylePicker';
+import { ResultsPanel } from '@/components/ui/ResultsPanel';
+import { ChatBar } from '@/components/ui/ChatBar';
 
 export default function AuraHome() {
   const [originalImage, setOriginalImage] = useState<string | null>(null);
@@ -18,6 +23,9 @@ export default function AuraHome() {
   const [messages, setMessages] = useState<Message[]>([
     { role: 'model', content: "I've rendered the vision for your space. It emphasizes natural light and creates a cleaner flow between the dining and sitting areas." }
   ]);
+  const [chat] = useState(() => createDesignChat());
+  const [chatInput, setChatInput] = useState('');
+  
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -26,14 +34,11 @@ export default function AuraHome() {
     if (file) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        setOriginalImage(event.target?.result as string);
+        const result = event.target?.result as string;
+        setOriginalImage(result);
         setStep('design');
-        // Reset messages for new design
-        setMessages([
-          { role: 'model', content: "I've rendered the vision for your space. It emphasizes natural light and creates a cleaner flow between the dining and sitting areas." }
-        ]);
-        // Auto-generate first design
-        generateDesign(event.target?.result as string, selectedStyle);
+        setMessages([{ role: 'model', content: "Welcome to your new design session. I'm analyzing the light and structure of your space." }]);
+        generateDesign(result, selectedStyle);
       };
       reader.readAsDataURL(file);
     }
@@ -61,10 +66,33 @@ export default function AuraHome() {
     }
   };
 
-  const handleChatRefinement = (refinement: string) => {
-    if (originalImage) {
-      generateDesign(originalImage, selectedStyle, refinement);
+  const handleChatSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || isGenerating) return;
+
+    const userMessage = chatInput.trim();
+    setChatInput('');
+    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+
+    try {
+      const result = await chat.sendMessage({ message: userMessage });
+      const modelResponse = result.text || "I'm sorry, I couldn't generate a response.";
+      setMessages(prev => [...prev, { role: 'model', content: modelResponse }]);
+
+      const visualKeywords = ['make', 'change', 'color', 'add', 'remove', 'style', 'blue', 'green', 'red', 'dark', 'light'];
+      if (visualKeywords.some(keyword => userMessage.toLowerCase().includes(keyword)) && originalImage) {
+        generateDesign(originalImage, selectedStyle, userMessage);
+      }
+    } catch (error) {
+      console.error("Chat error:", error);
     }
+  };
+
+  const resetSession = () => {
+    setOriginalImage(null);
+    setReimaginedImage(null);
+    setStep('upload');
+    setMessages([{ role: 'model', content: "Ready for a new project. Upload a photo to begin." }]);
   };
 
   const handleSave = async () => {
@@ -81,169 +109,129 @@ export default function AuraHome() {
         refinements: messages.filter(m => m.role === 'user').map(m => m.content)
       };
 
-      // Save using IndexedDB storage utility
       await saveDesign(designData);
-
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
       console.error("Failed to save design:", error);
-      alert("Aura encountered a storage limit error. We've optimized the system; please try saving again.");
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <main className="max-w-7xl mx-auto min-h-screen border-x border-brand-border bg-brand-bg flex flex-col">
-      {/* Header */}
-      <header className="h-20 px-10 flex justify-between items-center border-b border-brand-border bg-white">
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex items-center gap-4"
-        >
-          <span className="text-2xl font-serif italic tracking-tight">Aura.ai</span>
-        </motion.div>
-        
-        <div className="flex items-center gap-6">
-            <div className="text-right flex flex-col items-end">
-                <div className="text-[10px] uppercase tracking-[2px] opacity-60 mb-0.5">Active Design Space</div>
-                <div className="text-xs font-medium">Lexington Ave. Loft — Living Area</div>
-            </div>
-            
-            <button 
-                onClick={handleSave}
-                disabled={isSaving || !reimaginedImage}
-                className={`px-6 py-2 border border-brand-ink text-[11px] font-bold uppercase tracking-[1px] transition-all flex items-center gap-2 ${
-                    saveSuccess ? 'bg-green-600 border-green-600 text-white' : 'bg-brand-ink text-white hover:bg-white hover:text-brand-ink'
-                } disabled:opacity-50`}
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <Navbar onNewSession={resetSession} />
+
+      {/* Progress Bar (Global) */}
+      {isGenerating && (
+        <motion.div
+          initial={{ x: '-100%' }}
+          animate={{ x: '0%' }}
+          transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+          className="fixed top-14 left-0 h-0.5 w-full bg-primary z-[60]"
+        />
+      )}
+
+      <main className="flex-1 overflow-x-hidden pt-6 pb-40">
+        <AnimatePresence mode="wait">
+          {step === 'upload' ? (
+            <motion.div
+              key="hero"
+              initial={{ opacity: 0, y: 32 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+              className="relative overflow-hidden"
             >
-                {saveSuccess ? <><Check size={14} /> Saved</> : isSaving ? 'Saving...' : <><Save size={14} /> Save Design</>}
-            </button>
-        </div>
-      </header>
-
-      <AnimatePresence mode="wait">
-        {step === 'upload' ? (
-          <motion.section 
-            key="upload"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex-1 flex flex-col items-center justify-center py-20 px-10"
-          >
-            <div className="max-w-2xl text-center space-y-8">
-              <h1 className="text-6xl font-serif italic leading-tight">
-                Reimagine Your Space
-              </h1>
-              <p className="text-brand-ink/70 text-base leading-relaxed max-w-lg mx-auto">
-                Upload a photo of any interior. Aura&apos;s AI consultant will render a vision based on professional aesthetic principles.
-              </p>
-
-              <label className="group relative block w-full aspect-video border border-brand-border rounded-brand cursor-pointer hover:border-brand-ink transition-all overflow-hidden bg-white">
-                <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                  <div className="w-12 h-12 flex items-center justify-center text-brand-ink">
-                    <Upload size={24} />
-                  </div>
-                  <div className="text-[10px] uppercase tracking-[2px] font-bold">Upload Source Image</div>
-                </div>
-              </label>
-            </div>
-          </motion.section>
-        ) : (
-          <motion.section 
-            key="design"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex-1 grid lg:grid-cols-[1fr_360px] bg-brand-border gap-[1px]"
-          >
-            {/* Visualization Pane */}
-            <div className="bg-brand-bg p-10 flex flex-col">
-              <div className="relative flex-1 min-h-[400px] border border-brand-border rounded-brand overflow-hidden bg-white shadow-sm">
-                {originalImage && reimaginedImage ? (
-                  <ComparisonSlider original={originalImage} generated={reimaginedImage} className="w-full h-full" />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-6 text-center">
-                    <div className="text-brand-ink/20 animate-pulse">
-                        <Camera size={48} />
-                    </div>
-                    <div>
-                        <div className="text-[10px] uppercase tracking-[2px] opacity-60 mb-2">System Status</div>
-                        <h2 className="text-xl font-serif italic">Analyzing architectural flow...</h2>
-                    </div>
-                  </div>
-                )}
-                
-                {isGenerating && reimaginedImage && (
-                    <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] z-30 flex items-center justify-center">
-                         <div className="bg-white px-6 py-3 border border-brand-border rounded-brand shadow-xl flex items-center gap-3">
-                            <Sparkles className="animate-pulse text-brand-ink" size={16} />
-                            <span className="text-[10px] uppercase tracking-[2px] font-bold">Recalibrating Vision</span>
-                         </div>
-                    </div>
-                )}
+              {/* Mesh Gradient Background */}
+              <div className="absolute inset-0 -z-10 bg-background overflow-hidden">
+                <div className="mesh-blob absolute -top-1/4 -left-1/4 h-[80vw] w-[80vw] rounded-full bg-purple-500/10 blur-[120px] dark:bg-purple-900/10" />
+                <div className="mesh-blob absolute top-1/2 left-1/2 h-[60vw] w-[60vw] -translate-x-1/2 -translate-y-1/2 rounded-full bg-rose-500/10 blur-[100px] dark:bg-rose-900/10" style={{ animationDelay: '2s' }} />
+                <div className="mesh-blob absolute -bottom-1/4 -right-1/4 h-[80vw] w-[80vw] rounded-full bg-blue-500/10 blur-[120px] dark:bg-blue-900/10" style={{ animationDelay: '4s' }} />
               </div>
 
-              {/* Controls */}
-              <div className="mt-8 space-y-6">
-                <div className="flex items-center justify-between border-b border-brand-border pb-4">
-                    <span className="text-[10px] uppercase tracking-[2px] font-bold">Style Carousel</span>
-                    <button 
-                        onClick={() => { setStep('upload'); setOriginalImage(null); setReimaginedImage(null); }}
-                        className="text-[9px] uppercase tracking-[1px] font-bold hover:opacity-50 transition-opacity"
+              <div className="container mx-auto px-4 py-32 text-center">
+                <motion.h1 
+                  className="mb-4 text-4xl font-bold tracking-tight md:text-6xl"
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                >
+                  Reimagine <span className="text-muted-foreground italic font-medium">Your Space</span>
+                </motion.h1>
+                <motion.p 
+                  className="mx-auto mb-10 max-w-xl text-lg text-muted-foreground"
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  Upload a photo of any interior. Aura&apos;s AI consultant will render a vision based on professional aesthetic principles.
+                </motion.p>
+
+                <div className="space-y-8">
+                  <UploadZone onFileSelect={handleFileUpload} preview={originalImage} />
+                  
+                  {originalImage && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="space-y-8"
                     >
-                        Reset Workspace
-                    </button>
+                      <StylePicker selectedId={selectedStyle} onSelect={handleStyleChange} />
+                      <button
+                        onClick={() => generateDesign(originalImage!, selectedStyle)}
+                        disabled={isGenerating}
+                        className="h-11 w-full max-w-sm rounded-xl bg-primary px-8 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                      >
+                        {isGenerating ? 'Rendering...' : 'Generate Design'}
+                      </button>
+                    </motion.div>
+                  )}
                 </div>
-                
-                <StyleSelector selectedId={selectedStyle} onSelect={handleStyleChange} />
               </div>
-            </div>
-
-            {/* Side Console */}
-            <div className="bg-white p-6 flex flex-col">
-                <DesignChat 
-                  onRefine={handleChatRefinement} 
-                  isGenerating={isGenerating} 
-                  messages={messages}
-                  setMessages={setMessages}
-                />
-                
-                <div className="mt-10">
-                    <span className="text-[10px] uppercase tracking-[2px] mb-4 block border-b border-brand-border pb-2 opacity-60">Curated Collection</span>
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-brand-accent/20 rounded-brand" />
-                            <div>
-                                <div className="text-[11px] font-bold">Sørensen Leather Sofa</div>
-                                <div className="text-[10px] opacity-50">$4,200.00 — Design Within Reach</div>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-brand-ink/10 rounded-brand" />
-                            <div>
-                                <div className="text-[11px] font-bold">Hand-Tufted Wool Rug</div>
-                                <div className="text-[10px] opacity-50">$890.00 — Nordic Knots</div>
-                            </div>
-                        </div>
-                    </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="results"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <div className="container mx-auto px-4 py-8">
+                <div className="mb-10 flex flex-col items-center gap-6">
+                  <div className="text-center">
+                    <h2 className="text-2xl font-bold tracking-tight">Design Preview</h2>
+                    <p className="text-sm text-muted-foreground italic">Exploring {STYLES.find(s => s.id === selectedStyle)?.name} aesthetics</p>
+                  </div>
+                  <StylePicker selectedId={selectedStyle} onSelect={handleStyleChange} />
                 </div>
-            </div>
-          </motion.section>
-        )}
-      </AnimatePresence>
-      
-      {/* Footer Branding */}
-      <footer className="mt-32 pt-12 border-t border-black/5 flex flex-col md:flex-row justify-between items-center gap-8 text-[10px] font-bold uppercase tracking-[0.2em] text-brand-muted pb-12">
-        <div>© 2026 Aura Home Interiors</div>
-        <div className="flex gap-12">
-            <a href="#" className="hover:text-brand-ink transition-colors">Privacy</a>
-            <a href="#" className="hover:text-brand-ink transition-colors">Terms</a>
-            <a href="#" className="hover:text-brand-ink transition-colors">Contact</a>
-        </div>
-      </footer>
-    </main>
+
+                <ResultsPanel 
+                  original={originalImage} 
+                  generated={reimaginedImage} 
+                  isGenerating={isGenerating}
+                  styleDescription={messages.find(m => m.role === 'model' && m.content.length > 50)?.content}
+                  onSave={handleSave}
+                  isSaving={isSaving}
+                  saveSuccess={saveSuccess}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+
+      {/* Chat Bar Overlay */}
+      {step === 'design' && (
+        <ChatBar 
+          messages={messages} 
+          input={chatInput} 
+          onInputChange={setChatInput} 
+          onSend={handleChatSend} 
+          isGenerating={isGenerating} 
+        />
+      )}
+    </div>
   );
 }
