@@ -11,31 +11,38 @@ interface StylePickerProps {
 
 export function StylePicker({ selectedId, onSelect }: StylePickerProps) {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-2">
+    <div className="flex flex-wrap items-center justify-center gap-4">
       {STYLES.map((style) => {
         const isActive = selectedId === style.id;
         return (
           <motion.button
             key={style.id}
             onClick={() => onSelect(style.id)}
-            whileHover={{ scale: 1.05 }}
+            whileHover={{ y: -4, scale: 1.02 }}
             whileTap={{ scale: 0.95 }}
             className={`
-              relative flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium transition-all
+              relative flex items-center gap-3 rounded-2xl px-6 py-3 text-[11px] font-bold uppercase tracking-[0.2em] transition-all duration-500
               ${isActive 
-                ? 'bg-primary text-primary-foreground shadow-sm' 
-                : 'bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground border border-border/40'
+                ? 'text-primary-foreground' 
+                : 'text-gray-400 hover:text-white border border-white/5 hover:border-white/20 bg-white/[0.03] hover:bg-white/[0.08]'
               }
             `}
           >
-            <span>{style.icon}</span>
-            <span>{style.name}</span>
+            <span className="text-lg opacity-80">{style.icon}</span>
+            <span className="relative z-10">{style.name}</span>
             {isActive && (
               <motion.div
-                layoutId="style-pill"
-                className="absolute inset-0 z-[-1] rounded-full bg-primary"
-                transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                layoutId="style-pill-bg"
+                className="absolute inset-0 z-0 rounded-2xl bg-gradient-to-r from-primary to-blue-600 shadow-lg shadow-primary/20"
+                transition={{ type: 'spring', bounce: 0.15, duration: 0.6 }}
               />
+            )}
+            
+            {/* Hover Tooltip - Minimalist version */}
+            {!isActive && (
+                <div className="absolute -top-12 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-black/90 text-white rounded-lg text-[10px] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap border border-white/10 backdrop-blur-md">
+                    {style.description}
+                </div>
             )}
           </motion.button>
         );

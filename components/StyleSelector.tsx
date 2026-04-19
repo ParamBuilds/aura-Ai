@@ -4,12 +4,12 @@ import React from 'react';
 import { motion } from 'motion/react';
 
 export const STYLES = [
-  { id: 'scandinavian', name: 'Scandinavian', description: 'Minimalist, functional, and cozy.', icon: '🏔️' },
-  { id: 'mid-century', name: 'Mid-Century', description: 'Retro charm with modern lines.', icon: '📻' },
-  { id: 'industrial', name: 'Industrial', description: 'Raw materials and urban edge.', icon: '🏭' },
-  { id: 'bohemian', name: 'Bohemian', description: 'Eclectic, colorful, and free-spirited.', icon: '🌿' },
-  { id: 'japandi', name: 'Japandi', description: 'Japanese aesthetic meets Scandi.', icon: '🎋' },
-  { id: 'minimalist', name: 'Minimalist', description: 'Essentialist and ultra-clean.', icon: '⚪' },
+  { id: 'japandi', name: 'Japandi Luxury', description: 'Japanese zen meets Scandinavian warmth.', icon: '🎋' },
+  { id: 'dark-academia', name: 'Dark Academia', description: 'Mysterious, scholarly, and moody.', icon: '📚' },
+  { id: 'brutalist', name: 'Raw Brutalism', description: 'Honest materials and rhythmic geometry.', icon: '🧱' },
+  { id: 'art-deco', name: 'Art Deco', description: 'Glamorous, geometric, and opulent.', icon: '💎' },
+  { id: 'minimalist', name: 'Pure Minimalist', description: 'The absolute essence of the space.', icon: '⚪' },
+  { id: 'industrial', name: 'High Industrial', description: 'Polished concrete and steel elegance.', icon: '🏗️' },
 ];
 
 interface StyleSelectorProps {
@@ -19,29 +19,42 @@ interface StyleSelectorProps {
 
 export function StyleSelector({ selectedId, onSelect }: StyleSelectorProps) {
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4 px-2 no-scrollbar">
+    <div className="flex gap-6 overflow-x-auto pb-6 px-4 no-scrollbar">
       {STYLES.map((style) => (
         <motion.button
           key={style.id}
-          whileHover={{ opacity: 0.8 }}
+          whileHover={{ y: -4 }}
+          whileTap={{ scale: 0.95 }}
           onClick={() => onSelect(style.id)}
-          className={`flex-shrink-0 w-28 text-left transition-all ${
-            selectedId === style.id ? 'opacity-100' : 'opacity-60'
-          }`}
+          data-assistant-text={style.description}
+          className={`flex-shrink-0 w-32 text-left group transition-all`}
         >
           <div 
-            className={`w-full h-20 mb-2 transition-all border ${
-                selectedId === style.id ? 'border-brand-ink outline outline-1 outline-brand-ink' : 'border-brand-border'
+            className={`w-full h-24 mb-3 rounded-2xl transition-all border overflow-hidden relative ${
+                selectedId === style.id ? 'border-primary ring-2 ring-primary/20' : 'border-white/10 opacity-60 group-hover:opacity-100 group-hover:border-white/30'
             }`}
             style={{ 
-                backgroundColor: style.id === 'scandinavian' ? '#E2DDD5' : 
-                                style.id === 'mid-century' ? '#D5DAD2' : 
-                                style.id === 'industrial' ? '#CBD2D5' :
-                                style.id === 'japandi' ? '#D2CBD5' :
-                                style.id === 'bohemian' ? '#D5C2C2' : '#E0E0E0'
+                backgroundColor: style.id === 'japandi' ? '#D9D1C5' : 
+                                style.id === 'dark-academia' ? '#2A2E33' : 
+                                style.id === 'brutalist' ? '#8C8C8C' :
+                                style.id === 'art-deco' ? '#A68966' :
+                                style.id === 'minimalist' ? '#F7F7F7' : '#4A5568'
             }}
-          />
-          <span className="text-[10px] font-bold uppercase tracking-[1px] block">{style.name}</span>
+          >
+            <div className="absolute inset-0 bg-gradient-to-tr from-black/20 to-transparent" />
+            <div className="absolute inset-0 flex items-center justify-center text-3xl">
+                {style.icon}
+            </div>
+            {selectedId === style.id && (
+                <motion.div 
+                    layoutId="style-active"
+                    className="absolute inset-0 border-2 border-primary rounded-2xl"
+                />
+            )}
+          </div>
+          <span className={`text-[10px] font-bold uppercase tracking-[0.2em] block text-center ${selectedId === style.id ? 'text-primary' : 'text-gray-500'}`}>
+            {style.name}
+          </span>
         </motion.button>
       ))}
     </div>
