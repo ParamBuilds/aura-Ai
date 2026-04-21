@@ -2,9 +2,20 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ 
-  apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY! 
-});
+let geminiAiInstance: any = null;
+
+function getGeminiAi() {
+  if (!geminiAiInstance) {
+    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("NEXT_PUBLIC_GEMINI_API_KEY is not defined. Please set it in your environment variables.");
+    }
+    geminiAiInstance = new GoogleGenAI({ apiKey });
+  }
+  return geminiAiInstance;
+}
+
+const ENABLE_OPENROUTER = process.env.NEXT_PUBLIC_ENABLE_OPENROUTER === 'true';
 
 export const MODELS = {
   GENERAL: 'gemini-3-flash-preview',
@@ -13,11 +24,38 @@ export const MODELS = {
 };
 
 export async function reimaginedRoom(originalImageBase64: string, style: string, refinement?: string) {
-  // We use the image model to reimagined the space
+  // If OpenRouter is enabled, use the server-side proxy
+  if (ENABLE_OPENROUTER) {
+    try {
+      const response = await fetch('/api/ai/reimagine', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          originalImageBase64,
+          style,
+          refinement,
+        }),
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+      
+      const errorData = await response.json();
+      console.warn("OpenRouter API failed, falling back to Gemini:", errorData.error);
+    } catch (error) {
+      console.error("OpenRouter request failed, falling back to Gemini:", error);
+    }
+  }
+
+  // Gemini Implementation (Existing Client-Side)
   const prompt = refinement 
     ? `Reimagine this room in ${style} style. Additionally, apply these refinements: ${refinement}. High quality, photorealistic, interior design photography.`
     : `Reimagine this room as a high-end interior design project in ${style} style. Maintain the basic structural layout but completely transform the furniture, decor, color palette, and lighting to match ${style}. Photorealistic, 4k.`;
 
+  const ai = getGeminiAi();
   const response = await ai.models.generateContent({
     model: MODELS.IMAGE,
     contents: {
@@ -33,7 +71,7 @@ export async function reimaginedRoom(originalImageBase64: string, style: string,
     },
     config: {
         imageConfig: {
-            aspectRatio: "3:4", // Good for vertical room shots
+            aspectRatio: "3:4",
             imageSize: "1K"
         }
     }
@@ -58,6 +96,35 @@ export async function reimaginedRoom(originalImageBase64: string, style: string,
 }
 
 export function createDesignChat() {
+  if (ENABLE_OPENROUTER) {
+    return {
+      sendMessage: async ({ message }: { message: string }) => {
+        try {
+          const response = await fetch('/api/ai/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ message }),
+          });
+
+          if (response.ok) {
+            return await response.json();
+          }
+          
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Chat API failed');
+        } catch (error) {
+          console.error("OpenRouter Chat failed:", error);
+          // Return a fallback message if server fails
+          return { text: "I'm having trouble connecting to my creative circuits, but let's keep going. How else can I help?" };
+        }
+      }
+    };
+  }
+
+  // Gemini Implementation (Existing Client-Side)
+  const ai = getGeminiAi();
   return ai.chats.create({
     model: MODELS.COMPLEX,
     config: {
